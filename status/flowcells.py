@@ -48,11 +48,25 @@ class FlowcellsHandler(SafeHandler):
 
         return OrderedDict(sorted(temp_flowcells.items()))
 
+    def get_latest_running_note(self):
+        fcs=self.list_flowcells()
+        latest_running_note_dic = {}
+        url="/api/v1/flowcell_notes/"
+
+        for fc in fcs:
+            notes_query = FlowcellNotesDataHandler()
+            notes = notes_query.get(fc)
+            note_dates = dict(zip(map(dateutil.parser.parse, notes.keys()), notes.keys()))
+            latest_date = note_dates[max(note_dates.keys())]
+            latest_running_note_dic[fc] = json.dumps({latest_date: notes[latest_date]})
+
+        return latest_running_note_dic
 
     def get(self):
         t = self.application.loader.load("flowcells.html")
         fcs=self.list_flowcells()
-        self.write(t.generate(gs_globals=self.application.gs_globals, thresholds=thresholds, user=self.get_current_user_name(), flowcells=fcs))
+        latest_running_note_dic = self.get_latest_running_note()
+        self.write(t.generate(gs_globals=self.application.gs_globals, thresholds=thresholds, latest_running_note_dic=latest_running_note_dic, user=self.get_current_user_name(), flowcells=fcs))
 
 
 class FlowcellHandler(SafeHandler):
@@ -242,7 +256,7 @@ class FlowcellQ30Handler(SafeHandler):
         return lane_q30
 
 class FlowcellNotesDataHandler(SafeHandler):
-    """Serves all running notes from a given flowcell.
+    """Serves all notes from a given flowcell.
     It connects to the genologics LIMS to fetch and update Running Notes information.
     URL: /api/v1/flowcell_notes/([^/]*)
     """
