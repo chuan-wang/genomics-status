@@ -28,6 +28,8 @@ from status.flowcells import FlowcellDemultiplexHandler, FlowcellLinksDataHandle
     FlowcellsHandler, FlowcellsInfoDataHandler, OldFlowcellsInfoDataHandler, ReadsTotalHandler
 from status.instruments import InstrumentLogsHandler, DataInstrumentLogsHandler, InstrumentNamesHandler
 from status.multiqc_report import MultiQCReportHandler
+from status.pricing import PricingComponentsDataHandler, PricingProductsDataHandler, \
+    PricingDateToVersionDataHandler, PricingExchangeRatesDataHandler
 from status.production import DeliveredMonthlyDataHandler, DeliveredMonthlyPlotHandler, DeliveredQuarterlyDataHandler, \
     DeliveredQuarterlyPlotHandler, ProducedMonthlyDataHandler, ProducedMonthlyPlotHandler, ProducedQuarterlyDataHandler, \
     ProducedQuarterlyPlotHandler, ProductionCronjobsHandler
@@ -35,7 +37,7 @@ from status.projects import CaliperImageHandler, CharonProjectHandler, \
     LinksDataHandler, PresetsHandler, ProjectDataHandler, ProjectQCDataHandler, ProjectSamplesDataHandler, ProjectSamplesHandler, \
     ProjectsDataHandler, ProjectsFieldsDataHandler, ProjectsHandler, ProjectsSearchHandler, ProjectSummaryHandler, \
     ProjectSummaryUpdateHandler, ProjectTicketsDataHandler, RunningNotesDataHandler, RecCtrlDataHandler, \
-    ProjMetaCompareHandler, ProjectInternalCostsHandler, ProjectRNAMetaDataHandler, FragAnImageHandler
+    ProjMetaCompareHandler, ProjectInternalCostsHandler, ProjectRNAMetaDataHandler, FragAnImageHandler, PresetsOnLoadHandler
 
 from status.nas_quotas import NASQuotasHandler
 from status.reads_plot import DataFlowcellYieldHandler, FlowcellPlotHandler, FlowcellCountPlotHandler, FlowcellCountApiHandler
@@ -129,6 +131,12 @@ class Application(tornado.web.Application):
             ("/api/v1/plot/samples_per_lane.png",
                 SamplesPerLanePlotHandler),
             ("/api/v1/samples_per_lane", SamplesPerLaneDataHandler),
+            ("/api/v1/pricing_date_to_version", PricingDateToVersionDataHandler),
+            ("/api/v1/pricing_components", PricingComponentsDataHandler),
+            ("/api/v1/pricing_components/([^/]*)$", PricingComponentsDataHandler),
+            ("/api/v1/pricing_exchange_rates", PricingExchangeRatesDataHandler),
+            ("/api/v1/pricing_products", PricingProductsDataHandler),
+            ("/api/v1/pricing_products/([^/]*)$", PricingProductsDataHandler),
             ("/api/v1/produced_monthly", ProducedMonthlyDataHandler),
             ("/api/v1/produced_monthly.png", ProducedMonthlyPlotHandler),
             ("/api/v1/produced_quarterly", ProducedQuarterlyDataHandler),
@@ -141,6 +149,7 @@ class Application(tornado.web.Application):
             ("/api/v1/project_summary_update/([^/]*)/([^/]*)$", ProjectSummaryUpdateHandler),
             ("/api/v1/project_search/([^/]*)$", ProjectsSearchHandler),
             ("/api/v1/presets", PresetsHandler),
+            ("/api/v1/presets/onloadcheck", PresetsOnLoadHandler),
             ("/api/v1/qc/([^/]*)$", SampleQCDataHandler),
             ("/api/v1/projectqc/([^/]*)$", ProjectQCDataHandler),
             ("/api/v1/rna_report/([^/]*$)", ProjectRNAMetaDataHandler),
@@ -188,7 +197,7 @@ class Application(tornado.web.Application):
             ("/project/([^/]*)$", ProjectSamplesHandler),
             ("/project/(P[^/]*)/([^/]*)$", ProjectSamplesHandler),
             ("/project_summary/([^/]*)$", ProjectSummaryHandler),
-            ("/projects/([^/]*)$", ProjectsHandler),
+            ("/projects", ProjectsHandler),
             ("/proj_meta", ProjMetaCompareHandler),
             ("/reads_total/([^/]*)$", ReadsTotalHandler),
             ("/rec_ctrl_view/([^/]*)$", RecCtrlDataHandler),
@@ -219,6 +228,9 @@ class Application(tornado.web.Application):
             self.gs_users_db = couch["gs_users"]
             self.instruments_db= couch["instruments"]
             self.instrument_logs_db = couch["instrument_logs"]
+            self.pricing_components_db = couch["pricing_components"]
+            self.pricing_exchange_rates_db = couch["pricing_exchange_rates"]
+            self.pricing_products_db = couch["pricing_products"]
             self.projects_db = couch["projects"]
             self.samples_db = couch["samples"]
             self.server_status_db = couch['server_status']
@@ -231,6 +243,8 @@ class Application(tornado.web.Application):
 
         # Load columns and presets from genstat-defaults user in StatusDB
         genstat_id = ''
+        user_id = ''
+        user = settings.get("username", None)
         for u in self.gs_users_db.view('authorized/users'):
             if u.get('key') == 'genstat-defaults':
                 genstat_id = u.get('value')
@@ -243,14 +257,12 @@ class Application(tornado.web.Application):
 
         # We need to get this database as OrderedDict, so the pv_columns doesn't
         # mess up
-        user = settings.get("username", None)
         password = settings.get("password", None)
         headers = {"Accept": "application/json",
                    "Authorization": "Basic " + "{}:{}".format(user, password).encode('base64')[:-1]}
         decoder = json.JSONDecoder(object_pairs_hook=OrderedDict)
         user_url = "{}/gs_users/{}".format(settings.get("couch_server"), genstat_id)
         json_user = requests.get(user_url, headers=headers).content.rstrip()
-
         self.genstat_defaults = decoder.decode(json_user)
 
         # Load private instrument listing
