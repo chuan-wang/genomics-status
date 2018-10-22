@@ -150,7 +150,12 @@ Description: Shows a table with all flow cells.
                     {% end %}
                 </td>
                 <td class="latest_running_note" class="text-center">
-                    {{ latest_running_note_dic[onefc] }}
+                    {% if latest_running_note_dic[onefc] != '' %}
+                        <div class="panel panel-default running-note-panel">
+                        <div class="panel-heading" markdown='1'>{{ latest_running_note_dic[onefc][1]['user'],latest_running_note_dic[onefc][0] }}</div>
+                        <div class="panel-body" markdown='1' style="white-space: pre-line">{{ latest_running_note_dic[onefc][1]['note'] }}</pre></div>
+                        </div>
+                    {% end %}
                 </td>
             </tr>
          {% end %}

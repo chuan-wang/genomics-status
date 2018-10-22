@@ -4,6 +4,7 @@
 import tornado.web
 import json
 import datetime
+import operator
 
 from genologics.entities import Container
 from genologics import lims
@@ -47,25 +48,35 @@ class FlowcellsHandler(SafeHandler):
             temp_flowcells[row.key] = row.value
 
         return OrderedDict(sorted(temp_flowcells.items(), reverse=True))
+        
 
-    def get_latest_running_note(self):
-        fcs=self.list_flowcells()
+    def get_latest_running_note(self, flowcells):
         latest_running_note_dic = {}
-        url="/api/v1/flowcell_notes/"
 
-        for fc in fcs:
-            notes_query = FlowcellNotesDataHandler()
-            notes = notes_query.get(fc)
-            note_dates = dict(zip(map(dateutil.parser.parse, notes.keys()), notes.keys()))
-            latest_date = note_dates[max(note_dates.keys())]
-            latest_running_note_dic[fc] = json.dumps({latest_date: notes[latest_date]})
+        for fc in flowcells:
+            try:
+                p=get_container_from_id(fc)
+            except (KeyError, IndexError) as e:
+                latest_running_note_dic[fc] = ""
+            else:
+                try:
+                    running_notes = json.loads(p.udf['Notes']) if 'Notes' in p.udf else {}
+                    sorted_running_notes = OrderedDict()
+                    for k, v in sorted(running_notes.iteritems(), key=lambda t: t[0], reverse=True):
+                        sorted_running_notes[k] = v
+                    if len(sorted_running_notes) > 0:
+                        latest_running_note_dic[fc] = [sorted_running_notes.keys()[0], sorted_running_notes[sorted_running_notes.keys()[0]]]
+                    else:
+                        latest_running_note_dic[fc] = ""
+                except (KeyError) as e:
+                    latest_running_note_dic[fc] = ""
 
         return latest_running_note_dic
 
     def get(self):
         t = self.application.loader.load("flowcells.html")
         fcs=self.list_flowcells()
-        latest_running_note_dic = self.get_latest_running_note()
+        latest_running_note_dic = self.get_latest_running_note(fcs)
         self.write(t.generate(gs_globals=self.application.gs_globals, thresholds=thresholds, latest_running_note_dic=latest_running_note_dic, user=self.get_current_user_name(), flowcells=fcs))
 
 
